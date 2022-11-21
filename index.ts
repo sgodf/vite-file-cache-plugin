@@ -6,7 +6,12 @@ const cacheDirJson = 'cacheFile.json';
 const cachePathPrefix = '/node_modules/.vite/cacheDir';
 
 // TODO 客户端缓存控制、文件名后缀处理
-export default function fileCachePlugin(cacheFiles: string[]): Plugin {
+export default function fileCachePlugin(options: {
+    cacheFiles: string[],
+    matchUrlFn?: (url?: string) => boolean
+  }
+): Plugin {
+  const { cacheFiles, matchUrlFn } = options
   return {
     name: 'fileCachePlugin',
     apply: 'serve',
@@ -14,8 +19,9 @@ export default function fileCachePlugin(cacheFiles: string[]): Plugin {
     configureServer(serve) {
       const { middlewares, transformRequest } = serve;
       middlewares.use(async (req, res, next) => {
+        const matchEx = matchUrlFn ? matchUrlFn?.(req?.url) : cacheFiles.find(file => req?.url?.includes(file))
         if (
-          cacheFiles.find(file => req?.url?.includes(file)) &&
+          matchEx &&
           req.url &&
           req.originalUrl
         ) {

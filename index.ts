@@ -9,9 +9,15 @@ const cachePathPrefix = '/node_modules/.vite/cacheDir';
 export default function fileCachePlugin(options: {
     cacheFiles: string[],
     matchUrlFn?: (url?: string) => boolean
+    matchIdFn?: (id: string, cacheFiles: string[]) => string
   }
 ): Plugin {
-  const { cacheFiles, matchUrlFn } = options
+  const { cacheFiles, matchUrlFn, matchIdFn } = options
+  const cacheFileInfoJsonPath = path.join(
+    __dirname,
+    cachePathPrefix,
+    cacheDirJson
+  );
   return {
     name: 'fileCachePlugin',
     apply: 'serve',
@@ -27,57 +33,48 @@ export default function fileCachePlugin(options: {
         ) {
           try {
             const formatUrl = req.originalUrl.split('?')[0];
-            // 读取文件信息
-            const { mtime } = fs.statSync(path.join(__dirname, formatUrl));
-            const cacheFileInfoJsonPath = path.join(
-              __dirname,
-              cachePathPrefix,
-              cacheDirJson
-            );
             const cacheDir = path.join(__dirname, cachePathPrefix);
             const fileName = formatUrl.replace(/\//g, '-');
-            const exist = fs.existsSync(cacheFileInfoJsonPath);
-            if (exist) {
-              const fileContent = await fs.readFileSync(cacheFileInfoJsonPath, {
-                encoding: 'utf8',
-              });
-              const serializeContent = JSON.parse(fileContent);
 
-              if (serializeContent[formatUrl] == mtime.getTime()) {
-                const readFileContent = await fs.readFileSync(
-                  path.join(cacheDir, fileName)
-                );
-
-                res.setHeader(
-                  'Content-Type',
-                  'application/javascript; charset=utf-8'
-                );
-                res.end(readFileContent);
-                return;
+            const cacheInfo = await getCacheInfo(formatUrl, cacheFileInfoJsonPath)
+            if (cacheInfo) {
+              const { exist, cacheHit, serializeContent, mtime } = cacheInfo
+              if (exist) {
+                if (cacheHit) {
+                  const readFileContent = await fs.readFileSync(
+                    path.join(cacheDir, fileName)
+                  );
+                  res.setHeader(
+                    'Content-Type',
+                    'application/javascript; charset=utf-8'
+                  );
+                  res.end(readFileContent);
+                  return;
+                } else {
+                  const fileInfo = JSON.stringify({
+                    ...serializeContent,
+                    [formatUrl]: mtime.getTime(),
+                  });
+                  const result = await transformRequest(formatUrl);
+                  fs.writeFileSync(cacheFileInfoJsonPath, fileInfo);
+                  fs.writeFileSync(
+                    path.join(cacheDir, fileName),
+                    result?.code ?? ''
+                  );
+                }
               } else {
+                // 首次加载
                 const fileInfo = JSON.stringify({
-                  ...serializeContent,
                   [formatUrl]: mtime.getTime(),
                 });
-                const result = await transformRequest(formatUrl);
+                const result = await transformRequest(req.url);
+                await fs.mkdirSync(path.join(__dirname, cachePathPrefix));
                 fs.writeFileSync(cacheFileInfoJsonPath, fileInfo);
                 fs.writeFileSync(
                   path.join(cacheDir, fileName),
                   result?.code ?? ''
                 );
               }
-            } else {
-              // 首次加载
-              const fileInfo = JSON.stringify({
-                [formatUrl]: mtime.getTime(),
-              });
-              const result = await transformRequest(req.url);
-              await fs.mkdirSync(path.join(__dirname, cachePathPrefix));
-              fs.writeFileSync(cacheFileInfoJsonPath, fileInfo);
-              fs.writeFileSync(
-                path.join(cacheDir, fileName),
-                result?.code ?? ''
-              );
             }
           } catch (err) {
             console.error(err);
@@ -87,31 +84,17 @@ export default function fileCachePlugin(options: {
       });
     },
     async load(id) {
-      let formatUrl = cacheFiles.find(file => id?.includes(file));
-      if (formatUrl) {
+      const matchId = matchIdFn ? matchIdFn?.(id, cacheFiles) : cacheFiles.find(file => id?.includes(file));
+      if (matchId) {
         try {
-          formatUrl = formatUrl?.startsWith('/') ? `${formatUrl}` : formatUrl;
-
-          // 读取文件信息
-          const { mtime } = fs.statSync(path.join(__dirname, formatUrl));
-          const cacheFileInfoJsonPath = path.join(
-            __dirname,
-            cachePathPrefix,
-            cacheDirJson
-          );
-
-          const exist = fs.existsSync(cacheFileInfoJsonPath);
-
-          if (exist) {
-            const fileContent = await fs.readFileSync(cacheFileInfoJsonPath, {
-              encoding: 'utf8',
-            });
-            const serializeContent = JSON.parse(fileContent);
-            // cache hit
-            if (serializeContent[formatUrl] == mtime.getTime()) {
+          const formatUrl = matchId?.startsWith('/') ? matchId : `/${matchId}`;
+          const cacheInfo = await getCacheInfo(formatUrl, cacheFileInfoJsonPath)
+          if (cacheInfo) {
+            const { exist,  cacheHit } = cacheInfo
+            if (exist && cacheHit) {
               return {
                 code: '',
-              };
+              }
             }
           }
         } catch (err) {
@@ -121,5 +104,36 @@ export default function fileCachePlugin(options: {
         return null;
       }
     },
-  };
+  }
+}
+
+const getCacheInfo = async (fileUrl: string, cacheFileInfoJsonPath: string) => {
+  try {
+    // 读取文件信息
+    const { mtime } = fs.statSync(path.join(__dirname, fileUrl));
+    const exist = fs.existsSync(cacheFileInfoJsonPath);
+    if (exist) {
+      const fileContent = await fs.readFileSync(cacheFileInfoJsonPath, {
+        encoding: 'utf8',
+      });
+      const serializeContent = JSON.parse(fileContent);
+      // cache hit
+      if (serializeContent[fileUrl] == mtime.getTime()) {
+        return {
+          exist,
+          cacheHit: true,
+          serializeContent,
+          mtime
+        };
+      }
+    } else {
+      return {
+        exist,
+        cacheHit: false,
+        mtime
+      }
+    }
+  } catch(err) {
+    console.error(err);
+  }
 }

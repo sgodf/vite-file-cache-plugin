@@ -1,5 +1,5 @@
 # Vite File Cache Plugin
-Applicable to single files with long compilation time and low change frequency
+Applicable to single files with long compilation time and low change frequenc (not support .vue or .tsx)
 
 # Install
 ```shell

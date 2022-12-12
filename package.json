@@ -1,6 +1,6 @@
 {
   "name": "vite-file-cache-plugin",
-  "version": "1.0.0-alpha.3",
+  "version": "1.0.0-alpha.2",
   "description": "vite cache file plugin",
   "main": "index.ts",
   "types": "./index.d.ts",

@@ -14,7 +14,7 @@ export default function fileCachePlugin(options: {
 ): Plugin {
   const { cacheFiles, matchUrlFn, matchIdFn } = options
   const cacheFileInfoJsonPath = path.join(
-    __dirname,
+    process.cwd(),
     cachePathPrefix,
     cacheDirJson
   );
@@ -23,7 +23,7 @@ export default function fileCachePlugin(options: {
     apply: 'serve',
     enforce: 'pre',
     configureServer(serve) {
-      const { middlewares, transformRequest } = serve;
+      const { middlewares, transformRequest, moduleGraph } = serve;
       middlewares.use(async (req, res, next) => {
         const matchEx = matchUrlFn ? matchUrlFn?.(req?.url) : cacheFiles.find(file => req?.url?.includes(file))
         if (
@@ -32,8 +32,10 @@ export default function fileCachePlugin(options: {
           req.originalUrl
         ) {
           try {
+            console.log(moduleGraph.idToModuleMap);
             const formatUrl = req.originalUrl.split('?')[0];
-            const cacheDir = path.join(__dirname, cachePathPrefix);
+            console.log(req.url, 'req.url');
+            const cacheDir = path.join(process.cwd(), cachePathPrefix);
             const fileName = formatUrl.replace(/\//g, '-');
 
             const cacheInfo = await getCacheInfo(formatUrl, cacheFileInfoJsonPath)
@@ -68,7 +70,7 @@ export default function fileCachePlugin(options: {
                   [formatUrl]: mtime.getTime(),
                 });
                 const result = await transformRequest(req.url);
-                await fs.mkdirSync(path.join(__dirname, cachePathPrefix));
+                await fs.mkdirSync(path.join(process.cwd(), cachePathPrefix));
                 fs.writeFileSync(cacheFileInfoJsonPath, fileInfo);
                 fs.writeFileSync(
                   path.join(cacheDir, fileName),
@@ -110,7 +112,7 @@ export default function fileCachePlugin(options: {
 const getCacheInfo = async (fileUrl: string, cacheFileInfoJsonPath: string) => {
   try {
     // 读取文件信息
-    const { mtime } = fs.statSync(path.join(__dirname, fileUrl));
+    const { mtime } = fs.statSync(path.join(process.cwd(), fileUrl));
     const exist = fs.existsSync(cacheFileInfoJsonPath);
     if (exist) {
       const fileContent = await fs.readFileSync(cacheFileInfoJsonPath, {

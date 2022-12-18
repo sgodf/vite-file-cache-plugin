@@ -7,6 +7,6 @@ export default defineConfig({
   plugins: [
     vue(),
     fileCachePlugin({
-      cacheFiles: ['/src/styles/index.less']
+      matchFn: (id) => id.includes('/src/styles/index.less')
     })],
 })

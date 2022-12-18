@@ -7,17 +7,16 @@ const cachePathPrefix = '/node_modules/.vite/cacheDir';
 
 // TODO 客户端缓存控制、文件名后缀处理
 export default function fileCachePlugin(options: {
-    cacheFiles: string[],
-    matchUrlFn?: (url?: string) => boolean
-    matchIdFn?: (id: string, cacheFiles: string[]) => string
+    matchFn: (id?: string) => boolean
   }
 ): Plugin {
-  const { cacheFiles, matchUrlFn, matchIdFn } = options
+  const { matchFn } = options
   const cacheFileInfoJsonPath = path.join(
     process.cwd(),
     cachePathPrefix,
     cacheDirJson
   );
+
   return {
     name: 'fileCachePlugin',
     apply: 'serve',
@@ -25,19 +24,20 @@ export default function fileCachePlugin(options: {
     configureServer(serve) {
       const { middlewares, transformRequest, moduleGraph } = serve;
       middlewares.use(async (req, res, next) => {
-        const matchEx = matchUrlFn ? matchUrlFn?.(req?.url) : cacheFiles.find(file => req?.url?.includes(file))
+        const matchEx = req?.url ? matchFn(process.cwd() + req.url) : false
         if (
           matchEx &&
-          req.url &&
-          req.originalUrl
+          req.url
         ) {
           try {
-            console.log(moduleGraph.idToModuleMap);
-            const formatUrl = req.originalUrl.split('?')[0];
-            console.log(req.url, 'req.url');
+            const { urlToModuleMap } = moduleGraph
+            const mod = urlToModuleMap.get(req.url)
+            if (!mod) {
+              return;
+            }
+            const formatUrl = mod.id ?? '';
             const cacheDir = path.join(process.cwd(), cachePathPrefix);
             const fileName = formatUrl.replace(/\//g, '-');
-
             const cacheInfo = await getCacheInfo(formatUrl, cacheFileInfoJsonPath)
             if (cacheInfo) {
               const { exist, cacheHit, serializeContent, mtime } = cacheInfo
@@ -57,7 +57,7 @@ export default function fileCachePlugin(options: {
                     ...serializeContent,
                     [formatUrl]: mtime.getTime(),
                   });
-                  const result = await transformRequest(formatUrl);
+                  const result = await transformRequest(req?.url);
                   fs.writeFileSync(cacheFileInfoJsonPath, fileInfo);
                   fs.writeFileSync(
                     path.join(cacheDir, fileName),
@@ -86,11 +86,10 @@ export default function fileCachePlugin(options: {
       });
     },
     async load(id) {
-      const matchId = matchIdFn ? matchIdFn?.(id, cacheFiles) : cacheFiles.find(file => id?.includes(file));
-      if (matchId) {
+      const matchEx = matchFn(id)
+      if (matchEx) {
         try {
-          const formatUrl = matchId?.startsWith('/') ? matchId : `/${matchId}`;
-          const cacheInfo = await getCacheInfo(formatUrl, cacheFileInfoJsonPath)
+          const cacheInfo = await getCacheInfo(id, cacheFileInfoJsonPath)
           if (cacheInfo) {
             const { exist,  cacheHit } = cacheInfo
             if (exist && cacheHit) {
@@ -112,7 +111,7 @@ export default function fileCachePlugin(options: {
 const getCacheInfo = async (fileUrl: string, cacheFileInfoJsonPath: string) => {
   try {
     // 读取文件信息
-    const { mtime } = fs.statSync(path.join(process.cwd(), fileUrl));
+    const { mtime } = fs.statSync(fileUrl);
     const exist = fs.existsSync(cacheFileInfoJsonPath);
     if (exist) {
       const fileContent = await fs.readFileSync(cacheFileInfoJsonPath, {

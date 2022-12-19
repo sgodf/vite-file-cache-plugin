@@ -1,6 +1,6 @@
 {
-  "name": "@godf/vite-file-cache-plugin",
-  "version": "1.0.0-beta.1",
+  "name": "vite-file-cache-plugin",
+  "version": "1.0.0-beta.2",
   "description": "vite cache file plugin",
   "main": "index.ts",
   "types": "./index.d.ts",

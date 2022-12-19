@@ -5,7 +5,7 @@
 
 # Install
 ```shell
-npm install @godf/vite-file-cache-plugin --save-dev
+npm install vite-file-cache-plugin --save-dev
 ```
 
 # Usage

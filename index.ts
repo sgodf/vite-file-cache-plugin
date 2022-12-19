@@ -33,6 +33,7 @@ export default function fileCachePlugin(options: {
             const { urlToModuleMap } = moduleGraph
             const mod = urlToModuleMap.get(req.url)
             if (!mod) {
+              next();
               return;
             }
             const formatUrl = mod.id ?? '';

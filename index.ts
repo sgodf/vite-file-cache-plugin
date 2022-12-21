@@ -112,7 +112,7 @@ export default function fileCachePlugin(options: {
 const getCacheInfo = async (fileUrl: string, cacheFileInfoJsonPath: string) => {
   try {
     // 读取文件信息
-    const { mtime } = fs.statSync(fileUrl);
+    const { mtime } = fs.statSync(fileUrl.split('?')[0]);
     const exist = fs.existsSync(cacheFileInfoJsonPath);
     if (exist) {
       const fileContent = await fs.readFileSync(cacheFileInfoJsonPath, {
